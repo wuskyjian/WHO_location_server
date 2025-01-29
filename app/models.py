@@ -136,6 +136,8 @@ class Task(db.Model):
 
     def to_dict(self, include_logs=False):
         """Convert task to dictionary."""
+        # Get current global counter
+        counter = GlobalCounter.query.first()
         data = {
             'id': self.id,
             'title': self.title,
@@ -148,7 +150,8 @@ class Task(db.Model):
                 'longitude': self.location_lon
             },
             'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'global_version': counter.task_counter if counter else 0  
         }
         if include_logs:
             data['logs'] = [log.to_dict() for log in self.logs]
