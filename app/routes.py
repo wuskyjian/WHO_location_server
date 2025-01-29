@@ -1,0 +1,254 @@
+from flask import Blueprint, send_file, request, current_app
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models import db, Task, TaskLog, User
+from app import socketio
+from app.services.report_service import ReportService
+from app.services.websocket_service import WebSocketService
+from app.services.task_service import TaskService
+from app.utils.decorators import handle_api_error, admin_required
+from app.utils.response import success_response, error_response, AuthError
+import os
+
+bp = Blueprint('api', __name__)
+
+# ----------------------
+# WebSocket Routes
+# ----------------------
+
+@socketio.on('connect')
+def handle_connect(auth):
+    """Handle WebSocket connection."""
+    WebSocketService.handle_connect(auth)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle WebSocket disconnection."""
+    WebSocketService.handle_disconnect()
+
+# ----------------------
+# Task Routes
+# ----------------------
+
+@bp.route('/tasks', methods=['POST'])
+@jwt_required()
+def add_task():
+    """Create new task endpoint."""
+    try:
+        current_user = db.session.get(User, get_jwt_identity())
+        if not current_user:
+            return error_response("User not found", status_code=404)
+
+        task = TaskService.create_task(request.json, current_user)
+        WebSocketService.broadcast_task_update(task)
+        
+        return success_response(
+            data={
+                "task_id": task.id,
+                "task": task.to_dict()
+            },
+            message="Task created successfully",
+            status_code=201
+        )
+        
+    except AuthError as e:
+        return error_response(message=e.message, status_code=e.status_code)
+    except Exception as e:
+        current_app.logger.error(f"Error creating task: {str(e)}")
+        return error_response(
+            message="Internal server error",
+            error=str(e) if current_app.debug else None,
+            status_code=500
+        )
+
+@bp.route('/tasks/<int:task_id>', methods=['PATCH'])
+@jwt_required()
+def update_task(task_id):
+    """Update task endpoint."""
+    task = db.session.get(Task, task_id)
+    if not task:
+        return error_response(
+            message="Task not found",
+            error=f"Task with ID {task_id} does not exist",
+            status_code=404
+        )
+
+    current_user_id = int(get_jwt_identity())
+    current_user = db.session.get(User, current_user_id)
+    if not current_user:
+        return error_response("User not found", status_code=404)
+
+    try:
+        if task.status == 'completed':
+            raise AuthError("Cannot modify completed tasks", 403)
+
+        data = request.json
+        note = data.get('note')
+
+        # Handle different roles
+        if current_user.role == 'ambulance':
+            if task.created_by != current_user_id:
+                raise AuthError("Access denied: You can only modify tasks you created", 403)
+            if not note:
+                raise AuthError("Note is required for ambulance updates", 400)
+
+        elif current_user.role == 'cleaning_team':
+            new_status = data.get('status')
+            if not new_status:
+                raise AuthError("Status is required for cleaning team updates", 400)
+
+            valid_transitions = {
+                'new': ['in_progress'],
+                'in_progress': ['completed', 'issue_reported'],
+                'issue_reported': ['in_progress']
+            }
+
+            if new_status not in valid_transitions.get(task.status, []):
+                raise AuthError(
+                    f"Invalid status transition from '{task.status}' to '{new_status}'. "
+                    f"Valid transitions are: {valid_transitions.get(task.status, [])}",
+                    400
+                )
+
+            if task.status == 'in_progress' and task.assigned_to != current_user_id:
+                raise AuthError("Access denied: You can only modify tasks assigned to you", 403)
+
+            task.status = new_status
+            if new_status == 'in_progress':
+                task.assigned_to = current_user_id
+
+        elif current_user.role == 'admin':
+            if not all(key in data for key in ['status', 'assigned_to']):
+                raise AuthError("Admins must provide 'status' and 'assigned_to' fields", 400)
+
+            task.status = data['status']
+            task.assigned_to = data['assigned_to']
+
+        else:
+            raise AuthError("Invalid role", 403)
+
+        # Create task log
+        task_log = TaskLog(
+            task_id=task.id,
+            status=task.status,
+            assigned_to=task.assigned_to,
+            modified_by=current_user_id,
+            note=note
+        )
+        db.session.add(task_log)
+        db.session.commit()
+
+        WebSocketService.broadcast_task_update(task)
+
+        return success_response(
+            data={"task": task.to_dict()},
+            message="Task updated successfully"
+        )
+
+    except AuthError as e:
+        return error_response(message=e.message, status_code=e.status_code)
+    except Exception as e:
+        current_app.logger.error(f"Error updating task: {str(e)}")
+        return error_response(
+            message="Internal server error",
+            error=str(e) if current_app.debug else None,
+            status_code=500
+        )
+
+@bp.route('/tasks/<int:task_id>', methods=['GET'])
+@jwt_required()
+@handle_api_error
+def get_task(task_id):
+    """Get single task details endpoint."""
+    current_user = db.session.get(User, int(get_jwt_identity()))
+    if not current_user:
+        return error_response("User not found", status_code=404)
+
+    task = db.session.get(Task, task_id)
+    if not task:
+        return error_response(
+            message="Task not found",
+            error=f"Task with ID {task_id} does not exist",
+            status_code=404
+        )
+
+    task_data = task.to_dict()
+    task_data['logs'] = [log.to_dict() for log in task.logs.order_by(TaskLog.timestamp.desc()).all()]
+
+    return success_response(
+        data={"task": task_data},
+        message="Task retrieved successfully"
+    )
+
+@bp.route('/tasks/<int:task_id>/logs', methods=['GET'])
+@jwt_required()
+@handle_api_error
+def get_task_logs(task_id):
+    """Get task logs endpoint."""
+    task = db.session.get(Task, task_id)
+    if not task:
+        return error_response(f"Task with ID {task_id} not found", status_code=404)
+
+    logs = task.logs.order_by(TaskLog.timestamp.desc()).all()
+    if not logs:
+        return error_response(f"No logs found for task ID {task_id}", status_code=404)
+
+    return success_response(
+        data=[log.to_dict(include_users=True) for log in logs],
+        message="Task logs retrieved successfully"
+    )
+
+@bp.route('/tasks', methods=['GET'])
+@jwt_required()
+@handle_api_error
+def get_all_tasks():
+    """Get all tasks endpoint."""
+    current_user = db.session.get(User, int(get_jwt_identity()))
+    if not current_user:
+        return error_response("User not found", status_code=404)
+        
+    tasks = Task.query.all()
+    return success_response(
+        data=[task.to_dict() for task in tasks],
+        message="Tasks retrieved successfully"
+    )
+
+# ----------------------
+# Report Routes
+# ----------------------
+
+@bp.route("/generate-report", methods=["GET"])
+@jwt_required()
+@admin_required
+@handle_api_error
+def generate_report():
+    """Generate report endpoint."""
+    filename, report_text = ReportService.generate_report()
+    return success_response(
+        data={
+            "filename": filename,
+            "report": report_text
+        },
+        message="Report generated successfully"
+    )
+
+@bp.route("/reports", methods=["GET"])
+@jwt_required()
+@handle_api_error
+def list_reports():
+    """List reports endpoint."""
+    files = ReportService.list_reports()
+    if not files:
+        return error_response("No reports found", status_code=404)
+        
+    return success_response(
+        data={"files": files},
+        message="Reports retrieved successfully"
+    )
+
+@bp.route("/reports/<string:filename>", methods=["GET"])
+@jwt_required()
+@handle_api_error
+def get_report(filename):
+    """Download report endpoint."""
+    file_path = ReportService.get_report_file(filename)
+    return send_file(file_path, as_attachment=True)
