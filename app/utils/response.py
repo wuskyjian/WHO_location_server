@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from flask import jsonify
+from flask import jsonify, make_response
 
 
 class AuthError(Exception):
@@ -21,6 +21,24 @@ def success_response(
     if data is not None:
         response["data"] = data
     return jsonify(response), status_code
+
+
+def redirect_response(
+    status_code: int = 304,
+    location: Optional[str] = None
+) -> tuple:
+    """Create a redirect response without body."""
+    if not (300 <= status_code <= 399):
+        raise ValueError("Status code must be 3XX")
+        
+    if status_code != 304 and not location:
+        raise ValueError("Location is required for non-304 redirects")
+        
+    response = make_response('', status_code)
+    if location:
+        response.headers['Location'] = location
+        
+    return response
 
 
 def error_response(
