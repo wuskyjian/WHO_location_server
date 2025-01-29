@@ -185,7 +185,8 @@ pytest tests/routes/     # API route tests only
         "created_by": "integer",
         "assigned_to": "integer",
         "created_at": "datetime",
-        "updated_at": "datetime"
+        "updated_at": "datetime",
+        "global_version": 123
       }
     ],
     "message": "Tasks retrieved successfully"
@@ -341,6 +342,45 @@ pytest tests/routes/     # API route tests only
 - `new` → `in_progress` → `completed`
 - Only assigned cleaning team can mark task as `in_progress`
 - Admin can change any task status
+
+#### GET /api/tasks/sync
+- **Description**: Synchronize tasks with version check
+- **Authentication**: Required
+- **Query Parameters**:
+  - `version`: Client's current version number
+    - Type: integer
+    - Optional: yes
+    - Default: 0
+    - Note: Invalid values will be treated as 0
+- **Responses**:
+  - `304`: No changes (when client version matches server version)
+  - `200`: Changes available
+    ```json
+    {
+      "data": {
+        "version": 123,
+        "needs_sync": true,
+        "tasks": [
+          {
+            "id": 1,
+            "title": "Task Title",
+            "description": "Task Description",
+            "status": "new",
+            "created_by": 1,
+            "assigned_to": 2,
+            "location": {
+              "latitude": 12.345678,
+              "longitude": 98.765432
+            },
+            "created_at": "2024-03-20T10:30:00+00:00",
+            "updated_at": "2024-03-20T10:30:00+00:00",
+            "global_version": 123
+          }
+        ]
+      }
+    }
+    ```
+  - `401`: Unauthorized
 
 ### Reports API
 
