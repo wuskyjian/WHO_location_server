@@ -1,12 +1,12 @@
 from flask import Blueprint, send_file, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Task, TaskLog, User
+from app.models import db, Task, TaskLog, User, GlobalCounter
 from app import socketio
 from app.services.report_service import ReportService
 from app.services.websocket_service import WebSocketService
 from app.services.task_service import TaskService
 from app.utils.decorators import handle_api_error, admin_required
-from app.utils.response import success_response, error_response, AuthError
+from app.utils.response import success_response, error_response, redirect_response, AuthError
 import os
 
 bp = Blueprint('api', __name__)
@@ -210,6 +210,26 @@ def get_all_tasks():
     return success_response(
         data=[task.to_dict() for task in tasks],
         message="Tasks retrieved successfully"
+    )
+
+@bp.route('/tasks/sync', methods=['GET'])
+@jwt_required()
+@handle_api_error
+def sync_tasks():
+    """Sync tasks with version check."""
+    client_version = request.args.get('version', type=int, default=0)
+    current_version = GlobalCounter.query.first().task_counter
+    
+    if client_version == current_version:
+        return redirect_response(status_code=304)
+    
+    tasks = Task.query.all()
+    return success_response(
+        data={
+            "version": current_version,
+            "needs_sync": True,
+            "tasks": [task.to_dict() for task in tasks]
+        }
     )
 
 # ----------------------
