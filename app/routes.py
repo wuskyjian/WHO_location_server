@@ -8,6 +8,7 @@ from app.services.task_service import TaskService
 from app.utils.decorators import handle_api_error, admin_required
 from app.utils.response import success_response, error_response, redirect_response, AuthError, NotFoundError
 import os
+from datetime import datetime, date
 
 bp = Blueprint('api', __name__)
 
@@ -187,8 +188,22 @@ def sync_tasks():
 @admin_required
 @handle_api_error
 def generate_report():
-    """Generate report endpoint."""
-    filename, report_text = ReportService.generate_report()
+    """Generate report endpoint with optional date parameter."""
+    date_str = request.args.get('date')
+    today = date.today()
+    
+    if date_str:
+        try:
+            report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            # Check if date is in the future
+            if report_date > today:
+                return error_response("Cannot generate report for future dates", 400)
+        except ValueError:
+            return error_response("Invalid date format. Please use YYYY-MM-DD format.", 400)
+    else:
+        report_date = today
+        
+    filename, report_text = ReportService.generate_report(report_date=report_date)
     return success_response(
         data={
             "filename": filename,
