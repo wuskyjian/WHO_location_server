@@ -85,46 +85,15 @@ pytest tests/routes/     # API route tests only
 
 ### Authentication
 
-#### Login
-- **Endpoint**: `POST /api/auth/login`
-- **Description**: Authenticate user and retrieve JWT token
-- **Request Body**:
-  ```json
-  {
-    "username": "string",
-    "password": "string" // Password is plain text
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "status": "success",
-    "message": "Login successful",
-    "data": {
-      "token": "string",
-      "token_type": "Bearer",
-      "expires_in": 3600,
-      "user": {
-        "id": "integer",
-        "username": "string",
-        "role": "string"
-      }
-    }
-  }
-  ```
-- **Status Codes**:
-  - `200`: Success
-  - `401`: Invalid credentials
-  - `400`: Missing JSON in request
-
-#### Register
+#### Register User
 - **Endpoint**: `POST /api/auth/register`
 - **Description**: Register a new user
+- **Access**: Public
 - **Request Body**:
   ```json
   {
     "username": "string",
-    "password": "string", // Password is plain text
+    "password": "string",
     "role": "string"  // "admin", "ambulance", or "cleaning_team"
   }
   ```
@@ -146,9 +115,87 @@ pytest tests/routes/     # API route tests only
   }
   ```
 - **Status Codes**:
-  - `201`: User created
-  - `400`: Missing JSON in request or validation error
+  - `201`: User created successfully
+  - `400`: Missing JSON or invalid data
+  - `401`: Invalid credentials
+
+#### Login
+- **Endpoint**: `POST /api/auth/login`
+- **Description**: Authenticate user and get JWT token
+- **Access**: Public
+- **Request Body**:
+  ```json
+  {
+    "username": "string",
+    "password": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "success",
+    "message": "Login successful",
+    "data": {
+      "token": "string",
+      "token_type": "Bearer",
+      "expires_in": 3600,
+      "user": {
+        "id": "integer",
+        "username": "string",
+        "role": "string"
+      }
+    }
+  }
+  ```
+- **Status Codes**:
+  - `200`: Success
+  - `400`: Missing JSON or missing credentials
+  - `401`: Invalid username or password
+
+#### List Users
+- **Endpoint**: `GET /api/auth/users`
+- **Description**: Get list of users, optionally filtered by role
+- **Access**: Admin only
+- **Query Parameters**:
+  - `role` (optional): Filter users by role
+- **Response**:
+  ```json
+  {
+    "status": "success",
+    "message": "Retrieved {count} users",
+    "data": [
+      {
+        "id": "integer",
+        "username": "string",
+        "role": "string"
+      }
+    ]
+  }
+  ```
+- **Status Codes**:
+  - `200`: Success
   - `401`: Unauthorized
+  - `403`: Not admin
+
+#### Delete User
+- **Endpoint**: `DELETE /api/auth/users/<user_id>`
+- **Description**: Delete a user by ID
+- **Access**: Admin only
+- **Response**:
+  ```json
+  {
+    "status": "success",
+    "message": "User {user_id} deleted successfully",
+    "data": {
+      "deleted_id": "integer"
+    }
+  }
+  ```
+- **Status Codes**:
+  - `200`: Success
+  - `401`: Unauthorized
+  - `403`: Not admin or trying to delete self
+  - `404`: User not found
 
 ### Role-Based Access Control
 
@@ -199,10 +246,13 @@ pytest tests/routes/     # API route tests only
 
 #### Get Task Details
 - **Endpoint**: `GET /api/tasks/<task_id>`
-- **Description**: Get detailed information about a specific task, including its logs
+- **Description**: Get detailed information about a specific task
+- **Access**: All authenticated users
 - **Response**:
   ```json
   {
+    "status": "success",
+    "message": "Task retrieved successfully",
     "data": {
       "task": {
         "id": "integer",
@@ -229,8 +279,7 @@ pytest tests/routes/     # API route tests only
           }
         ]
       }
-    },
-    "message": "Task retrieved successfully"
+    }
   }
   ```
 - **Status Codes**:
@@ -240,10 +289,13 @@ pytest tests/routes/     # API route tests only
 
 #### Get Task Logs
 - **Endpoint**: `GET /api/tasks/<task_id>/logs`
-- **Description**: Get the complete history of task updates and modifications
+- **Description**: Get complete history of task updates
+- **Access**: All authenticated users
 - **Response**:
   ```json
   {
+    "status": "success",
+    "message": "Task logs retrieved successfully",
     "data": [
       {
         "id": "integer",
@@ -259,8 +311,7 @@ pytest tests/routes/     # API route tests only
           "role": "string"
         }
       }
-    ],
-    "message": "Task logs retrieved successfully"
+    ]
   }
   ```
 - **Status Codes**:
@@ -280,47 +331,57 @@ pytest tests/routes/     # API route tests only
     "location": {
       "latitude": "float",
       "longitude": "float"
-    }
+    },
+    "assigned_to": "integer (required for admin)"
   }
   ```
 - **Response**:
   ```json
   {
+    "status": "success",
+    "message": "Task created successfully",
     "data": {
       "task_id": "integer",
       "task": {
         "id": "integer",
         "title": "string",
-        "status": "new",
+        "description": "string",
+        "status": "string",
         "location": {
           "latitude": "float",
           "longitude": "float"
         },
         "created_by": "integer",
         "assigned_to": "integer",
-        "created_at": "datetime"
+        "created_at": "datetime",
+        "updated_at": "datetime"
       }
     }
   }
   ```
 - **Status Codes**:
-  - `201`: Task created
+  - `201`: Task created successfully
+  - `400`: Invalid request data
   - `401`: Unauthorized
-  - `422`: Validation error
+  - `403`: Invalid role
 
 #### Update Task
 - **Endpoint**: `PATCH /api/tasks/<task_id>`
-- **Description**: Update task status or assignment
+- **Description**: Update task status, assignment, or add notes
+- **Access**: Varies by role
 - **Request Body**:
   ```json
   {
     "status": "string (optional)",
-    "assigned_to": "integer (optional)"
+    "assigned_to": "integer (required for admin)",
+    "note": "string (optional)"
   }
   ```
 - **Response**:
   ```json
   {
+    "status": "success",
+    "message": "Task updated successfully",
     "data": {
       "task": {
         "id": "integer",
@@ -334,14 +395,25 @@ pytest tests/routes/     # API route tests only
   ```
 - **Status Codes**:
   - `200`: Success
-  - `404`: Task not found
+  - `400`: Invalid request data
   - `401`: Unauthorized
-  - `422`: Validation error
+  - `403`: Invalid role or permissions
+  - `404`: Task not found
 
-#### Task Status Flow
-- `new` → `in_progress` → `completed`
-- Only assigned cleaning team can mark task as `in_progress`
-- Admin can change any task status
+#### Role-Specific Update Rules
+- **Ambulance**:
+  - Can only modify tasks they created
+  - Must provide note for updates
+- **Cleaning Team**:
+  - Can only modify assigned tasks
+  - Must provide status change
+  - Valid status transitions:
+    - `new` → `in_progress`
+    - `in_progress` → `completed`/`issue_reported`
+    - `issue_reported` → `in_progress`
+- **Admin**:
+  - Can modify any task
+  - Must provide status and assigned_to
 
 #### GET /api/tasks/sync
 - **Description**: Synchronize tasks with version check
@@ -386,35 +458,44 @@ pytest tests/routes/     # API route tests only
 
 #### Generate Report
 - **Endpoint**: `GET /api/generate-report`
-- **Description**: Generate a new report
+- **Description**: Generate a task statistics report for a specific date
 - **Access**: Admin only
+- **Query Parameters**:
+  - `date` (optional): Target date in YYYY-MM-DD format
+    - Defaults to today if not provided
+    - Cannot be a future date
 - **Response**:
   ```json
   {
+    "status": "success",
+    "message": "Report generated successfully",
     "data": {
-      "filename": "string",
-      "report": "string"
-    },
-    "message": "Report generated successfully"
+      "filename": "daily_task_report_2024-03-20_15-30-45.txt",
+      "report": "string (report content)"
+    }
   }
   ```
 - **Status Codes**:
   - `200`: Success
+  - `400`: Invalid date format or future date
   - `401`: Unauthorized
   - `403`: Not admin
 
 #### List Reports
 - **Endpoint**: `GET /api/reports`
-- **Description**: Get a list of all available reports
+- **Description**: Get a list of all available report files
+- **Access**: All authenticated users
 - **Response**:
   ```json
   {
+    "status": "success",
+    "message": "Reports retrieved successfully",
     "data": {
       "files": [
-        "string"
+        "daily_task_report_2024-03-20_15-30-45.txt",
+        "daily_task_report_2024-03-19_14-25-30.txt"
       ]
-    },
-    "message": "Reports retrieved successfully"
+    }
   }
   ```
 - **Status Codes**:
@@ -425,19 +506,106 @@ pytest tests/routes/     # API route tests only
 #### Download Report
 - **Endpoint**: `GET /api/reports/<filename>`
 - **Description**: Download a specific report file
+- **Access**: All authenticated users
 - **Parameters**:
-  - `filename`: Name of the report file to download
-- **Response**: File download
+  - `filename`: Name of the report file (e.g., "daily_task_report_2024-03-20_15-30-45.txt")
+- **Response**: 
+  - Content-Type: text/plain
+  - File download with report content
 - **Status Codes**:
   - `200`: Success
   - `401`: Unauthorized
-  - `404`: Report not found
+  - `404`: Report file not found
+
+#### Report Format
+```
+Daily Task Statistics (2024-03-20)
+----------------------------------------
+Tasks Created: 5
+
+Task Status Distribution:
+  - completed: 10
+  - in_progress: 8
+  - issue_reported: 3
+
+Reported Issues Details:
+----------------------------------------
+Task ID: 1
+Title: Water Leak
+Description: Major water leak in building A
+Created By: john_doe
+Assigned To: alice_smith
+Location: (123.456, 789.012)
+Task Logs:
+  - [2024-03-20 10:15:20] Status: new - Created by: john_doe - Note: Task created
+  - [2024-03-20 14:20:30] Status: in_progress - Assigned to: bob_worker
+  - [2024-03-20 15:30:45] Status: issue_reported - Assigned to: alice_smith - Note: Found critical issue
+----------------------------------------
+```
 
 ### WebSocket Events
-- `task_updates`: Real-time task status updates
-- `location_updates`: Real-time location updates
 
-## Development
+#### Connection
+- **URL**: `ws://host:port/`
+- **Authentication**: JWT token required in connection data
+  ```json
+  {
+    "token": "your-jwt-token"
+  }
+  ```
+- **Events**:
+  - `connect`: Triggered on connection attempt
+    - Requires authentication data
+    - Automatically joins task updates room on success
+  - `disconnect`: Triggered when client disconnects
+    - Automatically leaves task updates room
+
+#### Task Updates
+- **Event**: `task_updates`
+- **Direction**: Server → Client
+- **Trigger Conditions**:
+  - Task creation
+  - Task status changes
+  - Not triggered for note-only updates
+- **Room**: All authenticated clients in 'task_updates' room
+- **Payload**:
+  ```json
+  {
+    "id": "integer",
+    "title": "string",
+    "description": "string",
+    "status": "string",
+    "location": {
+      "latitude": "float",
+      "longitude": "float"
+    },
+    "created_by": "integer",
+    "assigned_to": "integer",
+    "created_at": "datetime",
+    "updated_at": "datetime",
+    "db_version": "integer"
+  }
+  ```
+
+#### Error Events
+- **Event**: `error`
+- **Direction**: Server → Client
+- **Conditions**:
+  - Missing or invalid token
+  - Token verification failure
+- **Payload**:
+  ```json
+  {
+    "message": "string"  // Error description
+  }
+  ```
+
+#### Event Optimization
+- Events are only broadcast when task status changes
+- Note-only updates do not trigger broadcasts
+- All connected clients receive updates simultaneously
+- Automatic room management for connected clients
+- Automatic disconnection on authentication failure
 
 ### Project Components
 
