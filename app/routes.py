@@ -80,20 +80,16 @@ def update_task(task_id):
         )
 
     except ValueError as e:
-        # 处理验证错误，返回 400
         return error_response(message=str(e), status_code=400)
     except NotFoundError as e:
-        # 处理资源不存在错误，返回 404
         return error_response(
             message=e.message,
             error=e.error if hasattr(e, 'error') else None,
             status_code=e.status_code
         )
     except AuthError as e:
-        # 处理权限错误
         return error_response(message=e.message, status_code=e.status_code)
     except Exception as e:
-        # 处理其他未预期的错误
         current_app.logger.error(f"Error updating task: {str(e)}")
         return error_response(
             message="Internal server error",
