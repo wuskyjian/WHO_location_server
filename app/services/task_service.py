@@ -1,6 +1,6 @@
-from flask import jsonify
+from flask import jsonify, current_app
 from app.models import db, Task, TaskLog, User, TaskStatus
-from app.utils.response import AuthError
+from app.utils.response import AuthError, NotFoundError
 
 class TaskService:
     """Service class for task-related operations."""
@@ -107,4 +107,85 @@ class TaskService:
 
         except Exception as e:
             db.session.rollback()
+            raise e 
+
+    @staticmethod
+    def update_task(task_id, data, current_user):
+        """Update task based on user role and permissions."""
+        try:
+            task = db.session.get(Task, task_id)
+            if not task:
+                # 添加详细的错误信息
+                raise NotFoundError(
+                    message="Task not found",
+                    error=f"Task with ID {task_id} does not exist"
+                )
+
+            if task.status == 'completed':
+                # 这个是权限/业务规则错误，用 AuthError 合适
+                raise AuthError("Cannot modify completed tasks", 403)
+
+            note = data.get('note')
+
+            # Handle different roles
+            if current_user.role == 'ambulance':
+                if task.created_by != current_user.id:
+                    raise AuthError("Access denied: You can only modify tasks you created", 403)
+                if not note:
+                    # 这是输入验证错误，用 ValueError 更合适
+                    raise ValueError("Note is required for ambulance updates")
+
+            elif current_user.role == 'cleaning_team':
+                new_status = data.get('status')
+                if not new_status:
+                    raise ValueError("Status is required for cleaning team updates")
+
+                valid_transitions = {
+                    'new': ['in_progress'],
+                    'in_progress': ['completed', 'issue_reported', 'in_progress'],
+                    'issue_reported': ['in_progress', 'issue_reported']
+                }
+
+                if new_status not in valid_transitions.get(task.status, []):
+                    raise ValueError(
+                        f"Invalid status transition from '{task.status}' to '{new_status}'. "
+                        f"Valid transitions are: {valid_transitions.get(task.status, [])}"
+                    )
+
+                if (task.status in ['in_progress', 'issue_reported']) and task.assigned_to != current_user.id:
+                    raise AuthError("Access denied: You can only modify tasks assigned to you", 403)
+
+                task.status = new_status
+                if new_status == 'in_progress':
+                    task.assigned_to = current_user.id
+
+            elif current_user.role == 'admin':
+                if not all(key in data for key in ['status', 'assigned_to']):
+                    raise ValueError("Admins must provide 'status' and 'assigned_to' fields")
+
+                task.status = data['status']
+                task.assigned_to = data['assigned_to']
+
+            else:
+                raise AuthError("Invalid role", 403)
+
+            # Create task log
+            task_log = TaskLog(
+                task_id=task.id,
+                status=task.status,
+                assigned_to=task.assigned_to,
+                modified_by=current_user.id,
+                note=note
+            )
+            db.session.add(task_log)
+            db.session.commit()
+
+            return task
+
+        except (ValueError, AuthError, NotFoundError) as e:  # 添加 NotFoundError
+            db.session.rollback()
+            raise e
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error updating task: {str(e)}")
             raise e 

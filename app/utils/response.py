@@ -9,6 +9,14 @@ class AuthError(Exception):
         self.status_code = status_code
 
 
+class NotFoundError(Exception):
+    """Exception raised for resource not found errors."""
+    def __init__(self, message, error=None, status_code=404):
+        self.message = message
+        self.error = error
+        self.status_code = status_code
+
+
 def success_response(
     data: Optional[Any] = None,
     message: Optional[str] = None,

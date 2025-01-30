@@ -6,7 +6,7 @@ from app.services.report_service import ReportService
 from app.services.websocket_service import WebSocketService
 from app.services.task_service import TaskService
 from app.utils.decorators import handle_api_error, admin_required
-from app.utils.response import success_response, error_response, redirect_response, AuthError
+from app.utils.response import success_response, error_response, redirect_response, AuthError, NotFoundError
 import os
 
 bp = Blueprint('api', __name__)
@@ -64,79 +64,13 @@ def add_task():
 @jwt_required()
 def update_task(task_id):
     """Update task endpoint."""
-    task = db.session.get(Task, task_id)
-    if not task:
-        return error_response(
-            message="Task not found",
-            error=f"Task with ID {task_id} does not exist",
-            status_code=404
-        )
-
-    current_user_id = int(get_jwt_identity())
-    current_user = db.session.get(User, current_user_id)
-    if not current_user:
-        return error_response("User not found", status_code=404)
-
     try:
-        if task.status == 'completed':
-            raise AuthError("Cannot modify completed tasks", 403)
+        current_user_id = int(get_jwt_identity())
+        current_user = db.session.get(User, current_user_id)
+        if not current_user:
+            return error_response("User not found", status_code=404)
 
-        data = request.json
-        note = data.get('note')
-
-        # Handle different roles
-        if current_user.role == 'ambulance':
-            if task.created_by != current_user_id:
-                raise AuthError("Access denied: You can only modify tasks you created", 403)
-            if not note:
-                raise AuthError("Note is required for ambulance updates", 400)
-
-        elif current_user.role == 'cleaning_team':
-            new_status = data.get('status')
-            if not new_status:
-                raise AuthError("Status is required for cleaning team updates", 400)
-
-            valid_transitions = {
-                'new': ['in_progress'],
-                'in_progress': ['completed', 'issue_reported', 'in_progress'],
-                'issue_reported': ['in_progress', 'issue_reported']
-            }
-
-            if new_status not in valid_transitions.get(task.status, []):
-                raise AuthError(
-                    f"Invalid status transition from '{task.status}' to '{new_status}'. "
-                    f"Valid transitions are: {valid_transitions.get(task.status, [])}",
-                    400
-                )
-
-            if (task.status in ['in_progress', 'issue_reported']) and task.assigned_to != current_user_id:
-                raise AuthError("Access denied: You can only modify tasks assigned to you", 403)
-
-            task.status = new_status
-            if new_status == 'in_progress':
-                task.assigned_to = current_user_id
-
-        elif current_user.role == 'admin':
-            if not all(key in data for key in ['status', 'assigned_to']):
-                raise AuthError("Admins must provide 'status' and 'assigned_to' fields", 400)
-
-            task.status = data['status']
-            task.assigned_to = data['assigned_to']
-
-        else:
-            raise AuthError("Invalid role", 403)
-
-        # Create task log
-        task_log = TaskLog(
-            task_id=task.id,
-            status=task.status,
-            assigned_to=task.assigned_to,
-            modified_by=current_user_id,
-            note=note
-        )
-        db.session.add(task_log)
-        db.session.commit()
-
+        task = TaskService.update_task(task_id, request.json, current_user)
         WebSocketService.broadcast_task_update(task)
 
         return success_response(
@@ -144,9 +78,21 @@ def update_task(task_id):
             message="Task updated successfully"
         )
 
+    except ValueError as e:
+        # 处理验证错误，返回 400
+        return error_response(message=str(e), status_code=400)
+    except NotFoundError as e:
+        # 处理资源不存在错误，返回 404
+        return error_response(
+            message=e.message,
+            error=e.error if hasattr(e, 'error') else None,
+            status_code=e.status_code
+        )
     except AuthError as e:
+        # 处理权限错误
         return error_response(message=e.message, status_code=e.status_code)
     except Exception as e:
+        # 处理其他未预期的错误
         current_app.logger.error(f"Error updating task: {str(e)}")
         return error_response(
             message="Internal server error",
