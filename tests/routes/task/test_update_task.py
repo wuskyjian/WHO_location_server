@@ -185,10 +185,31 @@ def test_update_task_cleaning_team(client, add_user, add_task, login):
     assert log.status == 'issue_reported'
     assert log.note == 'Found an issue'
 
-    # Test 3: Status transition from 'issue_reported'
+    # Test 2.4: Valid transition to same status (in_progress)
+    in_progress_task3 = add_task(
+        created_by=1,
+        status='in_progress',
+        assigned_to=cleaning_user.id,
+        title='Task Stay In Progress'
+    )
+    response = client.patch(
+        f'/api/tasks/{in_progress_task3.id}',
+        json={'status': 'in_progress', 'note': 'Still working'},
+        headers=headers
+    )
+    assert response.status_code == 200
+    assert "Task updated successfully" in response.json['message']
+    
+    # Verify status remains same
+    task = db.session.get(Task, in_progress_task3.id)
+    assert task.status == 'in_progress'
+    assert task.assigned_to == cleaning_user.id
+
+    # Test 3: Status transitions from 'issue_reported'
     issue_task = add_task(
         created_by=1,
         status='issue_reported',
+        assigned_to=cleaning_user.id,
         title='Issue Task'
     )
     
@@ -214,6 +235,26 @@ def test_update_task_cleaning_team(client, add_user, add_task, login):
     updated_task = db.session.get(Task, issue_task.id)
     assert updated_task.status == 'in_progress'
     assert updated_task.assigned_to == cleaning_user.id
+
+    # Test 3.3: Valid transition to same status (issue_reported)
+    issue_task2 = add_task(
+        created_by=1,
+        status='issue_reported',
+        assigned_to=cleaning_user.id,
+        title='Issue Task Stay'
+    )
+    response = client.patch(
+        f'/api/tasks/{issue_task2.id}',
+        json={'status': 'issue_reported', 'note': 'Still has issue'},
+        headers=headers
+    )
+    assert response.status_code == 200
+    assert "Task updated successfully" in response.json['message']
+    
+    # Verify status remains same
+    task = db.session.get(Task, issue_task2.id)
+    assert task.status == 'issue_reported'
+    assert task.assigned_to == cleaning_user.id
 
 def test_update_task_admin(client, add_user, add_task, login):
     """Test the update_task route for an 'admin' role."""

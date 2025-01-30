@@ -98,8 +98,8 @@ def update_task(task_id):
 
             valid_transitions = {
                 'new': ['in_progress'],
-                'in_progress': ['completed', 'issue_reported'],
-                'issue_reported': ['in_progress']
+                'in_progress': ['completed', 'issue_reported', 'in_progress'],
+                'issue_reported': ['in_progress', 'issue_reported']
             }
 
             if new_status not in valid_transitions.get(task.status, []):
@@ -109,7 +109,7 @@ def update_task(task_id):
                     400
                 )
 
-            if task.status == 'in_progress' and task.assigned_to != current_user_id:
+            if (task.status in ['in_progress', 'issue_reported']) and task.assigned_to != current_user_id:
                 raise AuthError("Access denied: You can only modify tasks assigned to you", 403)
 
             task.status = new_status
