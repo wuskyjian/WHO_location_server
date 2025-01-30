@@ -115,14 +115,12 @@ class TaskService:
         try:
             task = db.session.get(Task, task_id)
             if not task:
-                # 添加详细的错误信息
                 raise NotFoundError(
                     message="Task not found",
                     error=f"Task with ID {task_id} does not exist"
                 )
 
             if task.status == 'completed':
-                # 这个是权限/业务规则错误，用 AuthError 合适
                 raise AuthError("Cannot modify completed tasks", 403)
 
             note = data.get('note')
@@ -132,7 +130,6 @@ class TaskService:
                 if task.created_by != current_user.id:
                     raise AuthError("Access denied: You can only modify tasks you created", 403)
                 if not note:
-                    # 这是输入验证错误，用 ValueError 更合适
                     raise ValueError("Note is required for ambulance updates")
 
             elif current_user.role == 'cleaning_team':
@@ -182,7 +179,7 @@ class TaskService:
 
             return task
 
-        except (ValueError, AuthError, NotFoundError) as e:  # 添加 NotFoundError
+        except (ValueError, AuthError, NotFoundError) as e:  
             db.session.rollback()
             raise e
         except Exception as e:
