@@ -71,8 +71,12 @@ def update_task(task_id):
         if not current_user:
             return error_response("User not found", status_code=404)
 
+        old_status = db.session.get(Task, task_id).status if db.session.get(Task, task_id) else None
         task = TaskService.update_task(task_id, request.json, current_user)
-        WebSocketService.broadcast_task_update(task)
+        
+        # Only broadcast if status changed
+        if task.status != old_status:
+            WebSocketService.broadcast_task_update(task)
 
         return success_response(
             data={"task": task.to_dict()},
@@ -84,8 +88,8 @@ def update_task(task_id):
     except NotFoundError as e:
         return error_response(
             message=e.message,
-            error=e.error if hasattr(e, 'error') else None,
-            status_code=e.status_code
+            status_code=e.status_code,
+            error=getattr(e, 'error', None)
         )
     except AuthError as e:
         return error_response(message=e.message, status_code=e.status_code)
@@ -93,8 +97,8 @@ def update_task(task_id):
         current_app.logger.error(f"Error updating task: {str(e)}")
         return error_response(
             message="Internal server error",
-            error=str(e) if current_app.debug else None,
-            status_code=500
+            status_code=500,
+            error=str(e) if current_app.debug else None
         )
 
 @bp.route('/tasks/<int:task_id>', methods=['GET'])
