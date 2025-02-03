@@ -222,39 +222,42 @@ def test_update_task_cleaning_team(client, add_user, add_task, login):
     assert response.status_code == 400
     assert "Invalid status transition" in response.json['message']
     
-    # Test 3.2: Valid transition to 'in_progress'
+    # Test 3.2: Other cleaner cannot add issue details to task they're not assigned to
     response = client.patch(
         f'/api/tasks/{issue_task.id}',
-        json={'status': 'in_progress', 'note': 'Resuming work'},
-        headers=headers
+        json={'status': 'issue_reported', 'note': 'Additional issue details'},
+        headers=other_headers
     )
-    assert response.status_code == 200
-    assert "Task updated successfully" in response.json['message']
-    
-    # Verify task was assigned to cleaning user
-    updated_task = db.session.get(Task, issue_task.id)
-    assert updated_task.status == 'in_progress'
-    assert updated_task.assigned_to == cleaning_user.id
+    assert response.status_code == 403
+    assert "Access denied: Only the assigned user can add more issue details" in response.json['message']
 
-    # Test 3.3: Valid transition to same status (issue_reported)
-    issue_task2 = add_task(
-        created_by=1,
-        status='issue_reported',
-        assigned_to=cleaning_user.id,
-        title='Issue Task Stay'
-    )
+    # Test 3.3: Assigned cleaner can add more issue details
     response = client.patch(
-        f'/api/tasks/{issue_task2.id}',
-        json={'status': 'issue_reported', 'note': 'Still has issue'},
-        headers=headers
+        f'/api/tasks/{issue_task.id}',
+        json={'status': 'issue_reported', 'note': 'More issue details'},
+        headers=headers  # Using original assigned cleaner's token
     )
     assert response.status_code == 200
     assert "Task updated successfully" in response.json['message']
     
-    # Verify status remains same
-    task = db.session.get(Task, issue_task2.id)
+    # Verify status and assignee remain unchanged
+    task = db.session.get(Task, issue_task.id)
     assert task.status == 'issue_reported'
     assert task.assigned_to == cleaning_user.id
+
+    # Test 3.4: Valid transition to 'in_progress' by another cleaner
+    response = client.patch(
+        f'/api/tasks/{issue_task.id}',
+        json={'status': 'in_progress', 'note': 'Taking over the task'},
+        headers=other_headers
+    )
+    assert response.status_code == 200
+    assert "Task updated successfully" in response.json['message']
+    
+    # Verify task was assigned to the new cleaning user
+    updated_task = db.session.get(Task, issue_task.id)
+    assert updated_task.status == 'in_progress'
+    assert updated_task.assigned_to == other_cleaner.id
 
 def test_update_task_admin(client, add_user, add_task, login):
     """Test the update_task route for an 'admin' role."""

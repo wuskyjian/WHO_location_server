@@ -149,11 +149,19 @@ class TaskService:
                         f"Valid transitions are: {valid_transitions.get(task.status, [])}"
                     )
 
-                if (task.status in ['in_progress', 'issue_reported']) and task.assigned_to != current_user.id:
+                # Only the assigned user can modify a task when it's in progress
+                if task.status == 'in_progress' and task.assigned_to != current_user.id:
                     raise AuthError("Access denied: You can only modify tasks assigned to you", 403)
 
+                # Only the assigned user can add more issue reports
+                if task.status == 'issue_reported' and new_status == 'issue_reported' and task.assigned_to != current_user.id:
+                    raise AuthError("Access denied: Only the assigned user can add more issue details", 403)
+
+                # Store original status before update
+                original_status = task.status
                 task.status = new_status
-                if new_status == 'in_progress':
+                # Update task assignee when task is first taken or reassigned from reported issue
+                if new_status == 'in_progress' and original_status in ['new', 'issue_reported']:
                     task.assigned_to = current_user.id
 
             elif current_user.role == 'admin':
