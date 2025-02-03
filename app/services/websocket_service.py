@@ -22,6 +22,9 @@ class WebSocketService:
             return
 
         token = auth.get("token")
+        # Eliminar el prefijo "Bearer " si está presente
+        if token.startswith("Bearer "):
+            token = token[7:]
         try:
             # Decode the JWT token manually
             decoded_token = decode_token(token)
@@ -62,4 +65,15 @@ class WebSocketService:
             "db_version": GlobalCounter.query.first().task_counter
         }
         
-        emit('task_updates', task_data, room=cls.TASK_UPDATES_ROOM, namespace='/') 
+        emit('task_updates', task_data, room=cls.TASK_UPDATES_ROOM, namespace='/')
+
+    @classmethod
+    def broadcast_task_notification(cls, user_ids, message):
+        """Broadcast a notification to specific users."""
+        notify_data = {
+            "notification": {
+                "message": message,
+                "users": user_ids
+            }
+        }
+        emit('task_notification', notify_data, room=cls.TASK_UPDATES_ROOM, namespace='/')

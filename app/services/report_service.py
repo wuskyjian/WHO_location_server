@@ -245,3 +245,12 @@ class ReportService:
             raise AuthError(f"Report file '{filename}' not found", status_code=404)
             
         return file_path
+
+    @classmethod
+    def delete_report(cls, filename):
+        """Delete a specific report file."""
+        try:
+            file_path = cls.get_report_file(filename)
+            os.remove(file_path)
+        except Exception as e:
+            raise AuthError(f"Error deleting report file '{filename}': {str(e)}")

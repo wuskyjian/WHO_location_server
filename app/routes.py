@@ -1,4 +1,4 @@
-from flask import Blueprint, send_file, request, current_app
+from flask import Blueprint, send_file, request, current_app, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Task, TaskLog, User, GlobalCounter
 from app import socketio
@@ -40,6 +40,10 @@ def add_task():
             return error_response("User not found", status_code=404)
 
         task = TaskService.create_task(request.json, current_user)
+        WebSocketService.broadcast_task_notification(
+            [task.assigned_to],
+            f"You have a new assigned task. Task ID: {task.id}, Title: {task.title}, Note: {task.description}"
+        )
         WebSocketService.broadcast_task_update(task)
         
         return success_response(
@@ -64,17 +68,51 @@ def add_task():
 @bp.route('/tasks/<int:task_id>', methods=['PATCH'])
 @jwt_required()
 def update_task(task_id):
-    """Update task endpoint."""
     try:
         current_user_id = int(get_jwt_identity())
         current_user = db.session.get(User, current_user_id)
         if not current_user:
             return error_response("User not found", status_code=404)
 
-        old_status = db.session.get(Task, task_id).status if db.session.get(Task, task_id) else None
+        # Obtener el estado actual de la tarea antes de la actualización
+        old_task = db.session.get(Task, task_id)
+        if not old_task:
+            return error_response("Task not found", status_code=404)
+        old_status = old_task.status
+        old_assigned = old_task.assigned_to
+        old_note = getattr(old_task, 'note', None)
+
+        # Actualizar la tarea
         task = TaskService.update_task(task_id, request.json, current_user)
         
-        # Only broadcast if status changed
+        # Generar mensaje con los cambios
+        changes = []
+        if 'status' in request.json and task.status != old_status:
+            changes.append(f"Status changed from '{old_status}' to '{task.status}'")
+        if 'assigned_to' in request.json and task.assigned_to != old_assigned:
+            changes.append(f"Assigned changed from '{old_assigned}' to '{task.assigned_to}'")
+        if 'note' in request.json:
+            new_note = getattr(task, 'note', None)
+            if new_note != old_note:
+                changes.append("Note updated")
+        
+        if changes:
+            updater_name = getattr(current_user, 'username', None) or str(current_user_id)
+            message = f"Task '{task.title}' updated by {updater_name}: " + "; ".join(changes)
+            
+            # Usar siempre el id del usuario para notificar
+            recipients = []
+            # Notificar al usuario asignado actualmente (se asume que task.assigned_to es numérico)
+            recipients.append(task.assigned_to)
+            
+            # Si la asignación cambió, también notificar al usuario anterior
+            if old_assigned and old_assigned != task.assigned_to:
+                recipients.append(old_assigned)
+                
+            WebSocketService.broadcast_task_notification(recipients, message)
+
+        
+        # Broadcast la actualización de la tarea si el status cambió
         if task.status != old_status:
             WebSocketService.broadcast_task_update(task)
 
@@ -233,3 +271,17 @@ def get_report(filename):
     """Download report endpoint."""
     file_path = ReportService.get_report_file(filename)
     return send_file(file_path, as_attachment=True)
+
+@bp.route("/reports/<string:filename>", methods=["DELETE"])
+@jwt_required()
+@admin_required
+@handle_api_error
+def delete_report(filename):
+    """Delete report endpoint."""
+    try:
+        ReportService.delete_report(filename)
+        return jsonify({'message': f'Report {filename} deleted successfully'}), 200
+    except AuthError as e:
+        return jsonify({'error': str(e)}), e.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
