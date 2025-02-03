@@ -283,8 +283,10 @@ def after_insert(mapper, connection, target):
 def after_update(mapper, connection, target):
     """
     Increment the global task counter after a task is updated.
+    Only increment when there are actual changes to the task.
     """
-    connection.execute(text("UPDATE global_counter SET task_counter = (task_counter + 1) % 2147483647"))
+    if db.session.is_modified(target):
+        connection.execute(text("UPDATE global_counter SET task_counter = (task_counter + 1) % 2147483647"))
 
 @event.listens_for(Task, 'after_delete')
 def after_delete(mapper, connection, target):
