@@ -29,10 +29,14 @@ def generate_test_data():
         creator = db.session.get(User, created_by)
         assignee = db.session.get(User, assigned_to)
 
+        # For new tasks created by ambulance, assignee must be the creator
+        if status == "new" and creator.role == "ambulance" and created_by != assigned_to:
+            raise ValueError("New tasks created by ambulance must be self-assigned")
+
         role_validation = {
             "new": (
-                ("admin", "ambulance"),
-                ("ambulance", "ambulance")
+                ("admin", "ambulance"),  # admin can assign to any ambulance
+                ("ambulance", "ambulance")  # ambulance must self-assign
             ),
             "in_progress": (
                 ("admin", "cleaning_team"),
@@ -82,16 +86,24 @@ def generate_test_data():
     milan_lat, milan_lon = 45.4642, 9.1900  # Milan city center coordinates
     tasks = []
     
-    for task_num in range(1, 11):  # Generate 10 tasks
+    for task_num in range(1, 16):  # Generate 15 tasks
         while True:
             try:
                 # Randomly select creator and status
                 creator = random.choice([u for u in users if u.role in ("admin", "ambulance")])
                 status = random.choice(["new", "in_progress", "completed", "issue_reported"])
                 
-                # Determine assignee based on status
-                target_role = "ambulance" if status == "new" else "cleaning_team"
-                assignee = random.choice([u for u in users if u.role == target_role])
+                # Determine assignee based on status and creator role
+                if status == "new":
+                    if creator.role == "ambulance":
+                        # If creator is ambulance, must self-assign
+                        assignee = creator
+                    else:
+                        # If creator is admin, can assign to any ambulance
+                        assignee = random.choice([u for u in users if u.role == "ambulance"])
+                else:
+                    # For other statuses, assign to cleaning team
+                    assignee = random.choice([u for u in users if u.role == "cleaning_team"])
                 
                 # Generate geo-coordinates within 15 km of Milan
                 angle = random.uniform(0, 2 * math.pi)  # Random angle in radians
@@ -120,12 +132,35 @@ def generate_test_data():
                     "issue_reported": ["new", "in_progress", "issue_reported"]
                 }[status]
                 
+                # Get a random cleaning team member for status changes after 'new'
+                cleaning_team_member = random.choice([u for u in users if u.role == "cleaning_team"]) if status != "new" else None
+                
+                # Track the current assignee through status changes
+                current_assignee = None
+                
                 for idx, log_status in enumerate(status_flow):
+                    if log_status == "new":
+                        # New task creation
+                        if creator.role == 'ambulance':
+                            modifier = creator.id
+                            current_assignee = creator.id
+                        else:  # admin
+                            modifier = creator.id
+                            current_assignee = assignee.id  # assigned ambulance
+                    elif log_status == "in_progress":
+                        # Task picked up by cleaning team
+                        modifier = cleaning_team_member.id
+                        current_assignee = cleaning_team_member.id
+                    else:  # completed or issue_reported
+                        # Status updates by the same cleaning team member
+                        modifier = cleaning_team_member.id
+                        current_assignee = cleaning_team_member.id
+
                     log = TaskLog(
                         task_id=task.id,
                         status=log_status,
-                        assigned_to=assignee.id,
-                        modified_by=creator.id if idx == 0 else assignee.id,
+                        assigned_to=current_assignee,
+                        modified_by=modifier,
                         note=f"Status progression: {log_status}"
                     )
                     db.session.add(log)
