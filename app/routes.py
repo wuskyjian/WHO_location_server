@@ -74,7 +74,7 @@ def update_task(task_id):
         if not current_user:
             return error_response("User not found", status_code=404)
 
-        # Obtener el estado actual de la tarea antes de la actualización
+        # Get current task state before update
         old_task = db.session.get(Task, task_id)
         if not old_task:
             return error_response("Task not found", status_code=404)
@@ -82,10 +82,10 @@ def update_task(task_id):
         old_assigned = old_task.assigned_to
         old_note = getattr(old_task, 'note', None)
 
-        # Actualizar la tarea
+        # Update the task
         task = TaskService.update_task(task_id, request.json, current_user)
         
-        # Generar mensaje con los cambios
+        # Generate message with changes
         changes = []
         if 'status' in request.json and task.status != old_status:
             changes.append(f"Status changed from '{old_status}' to '{task.status}'")
@@ -100,19 +100,19 @@ def update_task(task_id):
             updater_name = getattr(current_user, 'username', None) or str(current_user_id)
             message = f"Task '{task.title}' updated by {updater_name}: " + "; ".join(changes)
             
-            # Usar siempre el id del usuario para notificar
+            # Always use user ID for notifications
             recipients = []
-            # Notificar al usuario asignado actualmente (se asume que task.assigned_to es numérico)
+            # Notify currently assigned user (assuming task.assigned_to is numeric)
             recipients.append(task.assigned_to)
             
-            # Si la asignación cambió, también notificar al usuario anterior
+            # If assignment changed, also notify previous assignee
             if old_assigned and old_assigned != task.assigned_to:
                 recipients.append(old_assigned)
                 
             WebSocketService.broadcast_task_notification(recipients, message)
 
         
-        # Broadcast la actualización de la tarea si el status cambió
+        # Broadcast task update if status changed
         if task.status != old_status:
             WebSocketService.broadcast_task_update(task)
 
