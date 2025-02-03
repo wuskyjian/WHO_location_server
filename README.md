@@ -1,5 +1,7 @@
 # WHO Location Server
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?style=flat-square)](https://github.com/wuskyjian/WHO_location_server)
+
 This project is a Flask-based application designed to manage and serve location-based tasks and users with real-time WebSocket updates.
 
 ## Project Structure
@@ -47,7 +49,7 @@ This project is a Flask-based application designed to manage and serve location-
 1. Initialize the database:
 ```bash
 flask db init
-   flask db migrate -m "Initial migration"
+flask db migrate -m "Initial migration"
 flask db upgrade
 ```
 
