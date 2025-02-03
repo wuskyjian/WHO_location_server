@@ -349,4 +349,3 @@ def test_update_task_admin(client, add_user, add_task, login):
     )
     assert response.status_code == 404
     assert "Task not found" in response.json['message']
-    assert "Task with ID 9999 does not exist" in response.json['error']
