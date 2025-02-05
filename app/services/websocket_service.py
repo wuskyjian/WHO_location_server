@@ -68,41 +68,6 @@ class WebSocketService:
         print(f"User sessions after disconnect: {cls.user_sessions}")
         print("=" * 50 + "\n")
     
-    @classmethod
-    def broadcast_task_update(cls, task):
-        """Broadcast task update to all connected clients.
-        
-        Args:
-            task: Task model instance
-        """
-        task_data = {
-            "id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "status": task.status,
-            "location": {
-                "latitude": task.location_lat,
-                "longitude": task.location_lon
-            },
-            "created_by": task.created_by,
-            "assigned_to": task.assigned_to,
-            "created_at": task.created_at.isoformat(),
-            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-            "db_version": GlobalCounter.query.first().task_counter
-        }
-        
-        emit('task_updates', task_data, room=cls.TASK_UPDATES_ROOM, namespace='/')
-
-    @classmethod
-    def broadcast_task_notification(cls, user_ids, message):
-        """Broadcast a notification to specific users."""
-        notify_data = {
-            "notification": {
-                "message": message,
-                "users": user_ids
-            }
-        }
-        emit('task_notification', notify_data, room=cls.TASK_UPDATES_ROOM, namespace='/')
 
     @classmethod
     def send_notification_to_users(cls, user_ids, notification_type, message):

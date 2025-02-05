@@ -545,69 +545,79 @@ Task Logs:
 ----------------------------------------
 ```
 
-### WebSocket Events
+## WebSocket Events
 
-#### Connection
-- **URL**: `ws://host:port/`
-- **Authentication**: JWT token required in connection data
-  ```json
-  {
-    "token": "your-jwt-token"
-  }
-  ```
-- **Events**:
-  - `connect`: Triggered on connection attempt
-    - Requires authentication data
-    - Automatically joins task updates room on success
-  - `disconnect`: Triggered when client disconnects
-    - Automatically leaves task updates room
+The server uses WebSocket for real-time task notifications. All WebSocket events use the default namespace '/'.
 
-#### Task Updates
-- **Event**: `task_updates`
-- **Direction**: Server → Client
-- **Trigger Conditions**:
-  - Task creation
-  - Task status changes
-  - Not triggered for note-only updates
-- **Room**: All authenticated clients in 'task_updates' room
-- **Payload**:
-  ```json
-  {
-    "id": "integer",
-    "title": "string",
-    "description": "string",
-    "status": "string",
-    "location": {
-      "latitude": "float",
-      "longitude": "float"
-    },
-    "created_by": "integer",
-    "assigned_to": "integer",
-    "created_at": "datetime",
-    "updated_at": "datetime",
-    "db_version": "integer"
-  }
-  ```
+### Connection
 
-#### Error Events
-- **Event**: `error`
-- **Direction**: Server → Client
-- **Conditions**:
-  - Missing or invalid token
-  - Token verification failure
-- **Payload**:
-  ```json
-  {
-    "message": "string"  // Error description
-  }
-  ```
+To connect to the WebSocket server:
 
-#### Event Optimization
-- Events are only broadcast when task status changes
-- Note-only updates do not trigger broadcasts
-- All connected clients receive updates simultaneously
-- Automatic room management for connected clients
-- Automatic disconnection on authentication failure
+1. Connect to the WebSocket server with authentication:
+```javascript
+socket.emit('connect', {
+    token: 'your_jwt_token'  // JWT token from login
+});
+```
+
+2. The server will authenticate the token and:
+   - On success: Join you to the task updates room
+   - On failure: Send an error message and disconnect
+
+### Events
+
+#### Receiving Task Notifications
+
+The server sends task notifications through the 'task_notification' event:
+
+```javascript
+socket.on('task_notification', (data) => {
+    // data structure:
+    {
+        "message": "Task notification message",
+        "type": "new_task" | "task_updated",  // Type of notification
+        "user_id": "user_id"  // ID of the recipient user
+    }
+});
+```
+
+Notification Types:
+- `new_task`: Sent when an admin creates a new task for an ambulance
+- `task_updated`: Sent when a task is updated (status change, assignment change, or note added)
+
+### Examples
+
+1. Connecting to WebSocket:
+```javascript
+const socket = io('http://your-server-url');
+
+socket.emit('connect', {
+    token: 'Bearer your_jwt_token'
+});
+```
+
+2. Listening for notifications:
+```javascript
+socket.on('task_notification', (data) => {
+    console.log('New notification:', data.message);
+    console.log('Notification type:', data.type);
+    console.log('For user:', data.user_id);
+});
+```
+
+### Notification Triggers
+
+1. New Task Creation:
+   - When: Admin creates a task for an ambulance
+   - Recipients: The assigned ambulance user
+   - Message includes: Task ID, title, and description
+
+2. Task Updates:
+   - When: Task is updated with status changes, assignment changes, or new notes
+   - Recipients: All users involved in the task (from TaskLog) except the updater
+   - Message includes: Changes made to the task
+
+Note: Empty notes or whitespace-only notes will not trigger notifications.
 
 ### Project Components
 
