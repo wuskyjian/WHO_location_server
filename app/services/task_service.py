@@ -72,7 +72,7 @@ class TaskService:
             if current_user.role == 'admin':
                 if 'assigned_to' not in data:
                     raise AuthError("Missing required field: assigned_to for admin")
-                assigned_to = data['assigned_to']
+                assigned_to = int(data['assigned_to'])
                 # Verify assigned user exists
                 if not db.session.get(User, assigned_to):
                     raise AuthError("Invalid assigned_to user ID")
@@ -177,10 +177,11 @@ class TaskService:
             else:
                 raise AuthError("Invalid role", 403)
             
-            # 如果分配给新用户，更新历史分配者列表
-            if 'assigned_to' in data and data['assigned_to'] != task.assigned_to:
-                if data['assigned_to'] not in task.historical_assignees:
-                    task.historical_assignees.append(data['assigned_to'])
+            # If assigned to a user not in history, add to historical assignees， caution: need to completely substitute the list!
+            if task.assigned_to not in task.historical_assignees:
+                historical = list(task.historical_assignees) if task.historical_assignees else []
+                historical.append(int(task.assigned_to))
+                task.historical_assignees = historical
 
             # Create task log
             task_log = TaskLog(

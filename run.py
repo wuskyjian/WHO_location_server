@@ -16,60 +16,60 @@ logger.setLevel(logging.DEBUG)
 
 app = create_app()
 
-@app.before_request
-def log_request_info():
-    """Log HTTP request details."""
-    g.request_start_time = datetime.now()
+# @app.before_request
+# def log_request_info():
+#     """Log HTTP request details."""
+#     g.request_start_time = datetime.now()
     
-    logger.debug('\n' + '='*100)
-    logger.debug('【REQUEST START】 %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
-    logger.debug('-'*100)
-    logger.debug('【PATH】 %s %s', request.method, request.full_path)
-    logger.debug('【HEADERS】\n%s', json.dumps(dict(request.headers), indent=2))
+#     logger.debug('\n' + '='*100)
+#     logger.debug('【REQUEST START】 %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
+#     logger.debug('-'*100)
+#     logger.debug('【PATH】 %s %s', request.method, request.full_path)
+#     logger.debug('【HEADERS】\n%s', json.dumps(dict(request.headers), indent=2))
     
-    # Log request body if exists
-    if request.get_data():
-        try:
-            # Try to parse and format JSON body
-            body = request.get_json(silent=True)
-            if body:
-                logger.debug('【BODY】\n%s', json.dumps(body, indent=2))
-            else:
-                logger.debug('【BODY】\n%s', request.get_data())
-        except Exception:
-            logger.debug('【BODY】\n%s', request.get_data())
+#     # Log request body if exists
+#     if request.get_data():
+#         try:
+#             # Try to parse and format JSON body
+#             body = request.get_json(silent=True)
+#             if body:
+#                 logger.debug('【BODY】\n%s', json.dumps(body, indent=2))
+#             else:
+#                 logger.debug('【BODY】\n%s', request.get_data())
+#         except Exception:
+#             logger.debug('【BODY】\n%s', request.get_data())
     
-    logger.debug('-'*100)
+#     logger.debug('-'*100)
 
-@app.after_request
-def log_response_info(response):
-    """Log HTTP response details."""
-    duration = datetime.now() - g.request_start_time
+# @app.after_request
+# def log_response_info(response):
+#     """Log HTTP response details."""
+#     duration = datetime.now() - g.request_start_time
     
-    logger.debug('【RESPONSE】 (%s ms)', int(duration.total_seconds() * 1000))
-    logger.debug('-'*100)
-    logger.debug('【STATUS】 %s', response.status)
-    logger.debug('【HEADERS】\n%s', json.dumps(dict(response.headers), indent=2))
+#     logger.debug('【RESPONSE】 (%s ms)', int(duration.total_seconds() * 1000))
+#     logger.debug('-'*100)
+#     logger.debug('【STATUS】 %s', response.status)
+#     logger.debug('【HEADERS】\n%s', json.dumps(dict(response.headers), indent=2))
     
-    if response.direct_passthrough:
-        logger.debug('【BODY】 [File or Stream Response]')
-    else:
-        try:
-            data = response.get_data()
-            if data:
-                try:
-                    # Try to parse and format JSON response
-                    json_data = json.loads(data)
-                    logger.debug('【BODY】\n%s', json.dumps(json_data, indent=2))
-                except json.JSONDecodeError:
-                    logger.debug('【BODY】\n%s', data)
-        except Exception as e:
-            logger.debug('【BODY】 [Could not log response data: %s]', str(e))
+#     if response.direct_passthrough:
+#         logger.debug('【BODY】 [File or Stream Response]')
+#     else:
+#         try:
+#             data = response.get_data()
+#             if data:
+#                 try:
+#                     # Try to parse and format JSON response
+#                     json_data = json.loads(data)
+#                     logger.debug('【BODY】\n%s', json.dumps(json_data, indent=2))
+#                 except json.JSONDecodeError:
+#                     logger.debug('【BODY】\n%s', data)
+#         except Exception as e:
+#             logger.debug('【BODY】 [Could not log response data: %s]', str(e))
     
-    logger.debug('【REQUEST END】 %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
-    logger.debug('='*100 + '\n')
+#     logger.debug('【REQUEST END】 %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
+#     logger.debug('='*100 + '\n')
     
-    return response
+#     return response
 
 if __name__ == "__main__":
     socketio.run(
