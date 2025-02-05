@@ -19,7 +19,8 @@ class Config:
     
     # JWT configuration
     JWT_SECRET_KEY = '12b47f3c1af1d8a36dc4bfa5f1a8d1f1c7c89f3c11b9d2a3f9c1e7f5d6f3e8d2'
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=1)
+    # JWT_ACCESS_TOKEN_EXPIRES = timedelta(seconds=10)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     
     # Socket.IO configuration

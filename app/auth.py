@@ -1,5 +1,5 @@
 from flask import Blueprint, request, current_app
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, decode_token
 from app.utils.response import AuthError, error_response, success_response
 from app.utils.validators import RequestValidator
 from app.utils.decorators import admin_required
@@ -62,8 +62,15 @@ def login():
     if user is None or not user.check_password(password):
         raise AuthError("Invalid username or password", 401)
 
-    access_token = create_access_token(identity=str(user.id))
+    access_token = create_access_token(identity=str(user.id), additional_claims={"sub": str(user.id)})
     
+    # Decode the JWT token manually
+    decoded_token = decode_token(access_token)
+    print("\n" + "=" * 50)
+    print("【Login】")
+    print(f"Decoded token: {decoded_token}")
+    print("\n" + "=" * 50)
+
     return success_response(
         data={
             "token": access_token,
