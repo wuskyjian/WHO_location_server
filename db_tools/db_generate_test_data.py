@@ -146,13 +146,16 @@ def generate_test_data():
                 
                 for idx, log_status in enumerate(status_flow):
                     if log_status == "new":
-                        # New task creation
+                        # New task creation - always assign to ambulance
                         if creator.role == 'ambulance':
+                            # If creator is ambulance, self-assign
                             modifier = creator.id
                             current_assignee = creator.id
                         else:  # admin
+                            # If creator is admin, must assign to an ambulance
+                            ambulance_user = random.choice([u for u in users if u.role == "ambulance"])
                             modifier = creator.id
-                            current_assignee = assignee.id
+                            current_assignee = ambulance_user.id
                         historical_assignees.append(current_assignee)
                     elif log_status == "in_progress":
                         # Task picked up by first cleaning team member
@@ -171,8 +174,17 @@ def generate_test_data():
                             modifier = first_cleaner.id
                             current_assignee = first_cleaner.id
                     else:  # completed
-                        modifier = current_assignee  # 保持当前的清洁工
-                        
+                        # Get a different cleaning team member for completion
+                        other_cleaners = [u for u in users if u.role == "cleaning_team" and u.id != first_cleaner.id]
+                        if other_cleaners:  # 如果有其他清洁工可选
+                            completing_cleaner = random.choice(other_cleaners)
+                            modifier = completing_cleaner.id
+                            current_assignee = completing_cleaner.id
+                            historical_assignees.append(current_assignee)
+                        else:
+                            modifier = first_cleaner.id
+                            current_assignee = first_cleaner.id
+
                     final_assignee = current_assignee
 
                     log = TaskLog(
