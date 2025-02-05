@@ -87,7 +87,8 @@ class TaskService:
                 location_lon=lon,
                 description=data.get('description'),
                 assigned_to=assigned_to,
-                status=TaskStatus.NEW
+                status=TaskStatus.NEW,
+                historical_assignees=[assigned_to]  # Initialize historical assignees
             )
             db.session.add(task)
             db.session.flush()  # Get the task ID
@@ -176,6 +177,11 @@ class TaskService:
             else:
                 raise AuthError("Invalid role", 403)
             
+            # 如果分配给新用户，更新历史分配者列表
+            if 'assigned_to' in data and data['assigned_to'] != task.assigned_to:
+                if data['assigned_to'] not in task.historical_assignees:
+                    task.historical_assignees.append(data['assigned_to'])
+
             # Create task log
             task_log = TaskLog(
                 task_id=task.id,

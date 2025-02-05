@@ -107,32 +107,7 @@ class Task(db.Model):
     creator = db.relationship('User', foreign_keys=[created_by], backref='created_tasks')
     assignee = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_tasks')
     logs = db.relationship('TaskLog', backref='task', lazy='dynamic', cascade='all, delete-orphan')
-
-    def assign_to(self, user_id, modified_by):
-        """Assign task to a user and create log entry."""
-        self.assigned_to = user_id
-        log = TaskLog(
-            task_id=self.id,
-            status=self.status,
-            assigned_to=user_id,
-            modified_by=modified_by
-        )
-        db.session.add(log)
-
-    def update_status(self, new_status, modified_by, note=None):
-        """Update task status and create log entry."""
-        if new_status not in TaskStatus:
-            raise ValueError(f"Invalid status: {new_status}")
-        
-        self.status = new_status
-        log = TaskLog(
-            task_id=self.id,
-            status=new_status,
-            assigned_to=self.assigned_to,
-            modified_by=modified_by,
-            note=note
-        )
-        db.session.add(log)
+    historical_assignees = db.Column(db.JSON, default=list)  # Store historical assignees as JSON array
 
     def to_dict(self, include_logs=False):
         """Convert task to dictionary."""
@@ -145,6 +120,7 @@ class Task(db.Model):
             'status': self.status,
             'created_by': self.created_by,
             'assigned_to': self.assigned_to,
+            'historical_assignees': self.historical_assignees,
             'location': {
                 'latitude': self.location_lat,
                 'longitude': self.location_lon

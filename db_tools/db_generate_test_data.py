@@ -55,6 +55,9 @@ def generate_test_data():
         if (creator.role, assignee.role) not in role_validation[status]:
             raise ValueError(f"Invalid {creator.role}→{assignee.role} assignment for status '{status}'")
 
+        # Initialize historical_assignees with the current assignee
+        historical_assignees = [assigned_to]
+
         return Task(
             title=title,
             description=description,
@@ -62,7 +65,8 @@ def generate_test_data():
             assigned_to=assigned_to,
             location_lat=location_lat,
             location_lon=location_lon,
-            status=status
+            status=status,
+            historical_assignees=historical_assignees  # Add historical assignees
         )
 
     def create_task_log(task_id: int, status: str, assigned_to: int, 
@@ -133,10 +137,12 @@ def generate_test_data():
                 }[status]
                 
                 # Get a random cleaning team member for status changes after 'new'
-                cleaning_team_member = random.choice([u for u in users if u.role == "cleaning_team"]) if status != "new" else None
+                first_cleaner = random.choice([u for u in users if u.role == "cleaning_team"]) if status != "new" else None
                 
                 # Track the current assignee through status changes
                 current_assignee = None
+                historical_assignees = []
+                final_assignee = None
                 
                 for idx, log_status in enumerate(status_flow):
                     if log_status == "new":
@@ -146,15 +152,28 @@ def generate_test_data():
                             current_assignee = creator.id
                         else:  # admin
                             modifier = creator.id
-                            current_assignee = assignee.id  # assigned ambulance
+                            current_assignee = assignee.id
+                        historical_assignees.append(current_assignee)
                     elif log_status == "in_progress":
-                        # Task picked up by cleaning team
-                        modifier = cleaning_team_member.id
-                        current_assignee = cleaning_team_member.id
-                    else:  # completed or issue_reported
-                        # Status updates by the same cleaning team member
-                        modifier = cleaning_team_member.id
-                        current_assignee = cleaning_team_member.id
+                        # Task picked up by first cleaning team member
+                        modifier = first_cleaner.id
+                        current_assignee = first_cleaner.id
+                        historical_assignees.append(current_assignee)
+                    elif log_status == "issue_reported":
+                        # Get a different cleaning team member for issue report
+                        other_cleaners = [u for u in users if u.role == "cleaning_team" and u.id != first_cleaner.id]
+                        if other_cleaners:  # 如果有其他清洁工可选
+                            second_cleaner = random.choice(other_cleaners)
+                            modifier = second_cleaner.id
+                            current_assignee = second_cleaner.id
+                            historical_assignees.append(current_assignee)
+                        else:
+                            modifier = first_cleaner.id
+                            current_assignee = first_cleaner.id
+                    else:  # completed
+                        modifier = current_assignee  # 保持当前的清洁工
+                        
+                    final_assignee = current_assignee
 
                     log = TaskLog(
                         task_id=task.id,
@@ -165,8 +184,12 @@ def generate_test_data():
                     )
                     db.session.add(log)
 
+                # Update task's historical assignees and final assignee
+                task.historical_assignees = historical_assignees
+                task.assigned_to = final_assignee  # 确保任务的 assigned_to 与最后一个日志一致
+
                 tasks.append(task)
-                db.session.commit()  # Commit task and logs
+                db.session.commit()
                 break
                 
             except ValueError as e:
