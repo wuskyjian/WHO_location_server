@@ -1,6 +1,7 @@
 from flask import jsonify, current_app
 from app.models import db, Task, TaskLog, User, TaskStatus
 from app.utils.response import AuthError, NotFoundError
+from datetime import datetime
 
 class TaskService:
     """Service class for task-related operations."""
@@ -122,16 +123,17 @@ class TaskService:
 
             if task.status == 'completed':
                 raise AuthError("Cannot modify completed tasks", 403)
-
+            
             note = data.get('note')
-
+            
             # Handle different roles
             if current_user.role == 'ambulance':
-                if task.created_by != current_user.id:
-                    raise AuthError("Access denied: You can only modify tasks you created", 403)
+                # Allow also assigned ambulance to modify task
+                if task.created_by != current_user.id and task.assigned_to != current_user.id:
+                    raise AuthError("Access denied: You can only modify tasks you created or are assigned to", 403)
                 if not note:
                     raise ValueError("Note is required for ambulance updates")
-
+            
             elif current_user.role == 'cleaning_team':
                 new_status = data.get('status')
                 if not new_status:
@@ -173,7 +175,7 @@ class TaskService:
 
             else:
                 raise AuthError("Invalid role", 403)
-
+            
             # Create task log
             task_log = TaskLog(
                 task_id=task.id,

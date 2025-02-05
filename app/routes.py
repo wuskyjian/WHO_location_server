@@ -35,22 +35,20 @@ def handle_disconnect():
 def add_task():
     """Create new task endpoint."""
     try:
-        # Get current user from JWT token
         current_user = db.session.get(User, get_jwt_identity())
         if not current_user:
             return error_response("User not found", status_code=404)
 
-        # Create task using TaskService
         task = TaskService.create_task(request.json, current_user)
         
-        # Send notification to assigned user
-        WebSocketService.send_notification_to_users(
-            [task.assigned_to],
-            "new_task",
-            f"You have a new assigned task. Task ID: {task.id}, Title: {task.title}, Description: {task.description}"
-        )
+        # Only send notification if admin creates task for ambulance
+        if current_user.role == 'admin' and task.assigned_to != current_user.id:
+            WebSocketService.send_notification_to_users(
+                [task.assigned_to],
+                "new_task",
+                f"You have a new assigned task created by admin {current_user.username}. Task ID: {task.id}, Title: {task.title}, Description: {task.description}"
+            )
         
-        # Return success response with task details
         return success_response(
             data={
                 "task_id": task.id,
@@ -60,6 +58,14 @@ def add_task():
             status_code=201
         )
         
+    except ValueError as e:
+        return error_response(message=str(e), status_code=400)
+    except NotFoundError as e:
+        return error_response(
+            message=e.message,
+            status_code=e.status_code,
+            error=getattr(e, 'error', None)
+        )
     except AuthError as e:
         return error_response(message=e.message, status_code=e.status_code)
     except Exception as e:
@@ -74,52 +80,47 @@ def add_task():
 @jwt_required()
 def update_task(task_id):
     try:
-        # Get current user from JWT token
         current_user_id = int(get_jwt_identity())
         current_user = db.session.get(User, current_user_id)
         if not current_user:
             return error_response("User not found", status_code=404)
 
-        # Get current task state before update
         old_task = db.session.get(Task, task_id)
         if not old_task:
             return error_response("Task not found", status_code=404)
         old_status = old_task.status
         old_assigned = old_task.assigned_to
-        old_note = getattr(old_task, 'note', None)
 
-        # Update the task using TaskService
         task = TaskService.update_task(task_id, request.json, current_user)
         
-        # Generate message with changes
         changes = []
+        # Check if status has changed  
         if 'status' in request.json and task.status != old_status:
             changes.append(f"Status changed from '{old_status}' to '{task.status}'")
+        # Check if assigned_to has changed
         if 'assigned_to' in request.json and task.assigned_to != old_assigned:
             changes.append(f"Assigned changed from '{old_assigned}' to '{task.assigned_to}'")
-        if 'note' in request.json:
-            new_note = getattr(task, 'note', None)
-            if new_note != old_note:
-                changes.append("Note updated")
+        # Check if note has changed
+        if 'note' in request.json and request.json['note'].strip():  
+            changes.append(f"Note updated: {request.json['note']}")
         
         if changes:
-            # Get updater name (username or user ID)
             updater_name = getattr(current_user, 'username', None) or str(current_user_id)
             message = f"Task '{task.title}' updated by {updater_name}: " + "; ".join(changes)
             
-            # Collect recipients for notification
-            recipients = []
-            # Notify currently assigned user
-            recipients.append(task.assigned_to)
+            # Get all assigned users from TaskLog except current user
+            task_logs = TaskLog.query.filter_by(task_id=task_id).all()
+            involved_users = set(log.assigned_to for log in task_logs 
+                              if log.assigned_to is not None and log.assigned_to != current_user_id)
             
-            # If assignment changed, also notify previous assignee
-            if old_assigned and old_assigned != task.assigned_to:
-                recipients.append(old_assigned)
-                
-            # Send notification to all relevant users
-            WebSocketService.send_notification_to_users(recipients,"task_updated", message)
+            # Send notification if there are recipients
+            if involved_users:
+                WebSocketService.send_notification_to_users(
+                    list(involved_users),
+                    "task_updated",
+                    message
+                )
 
-        # Return success response with updated task details
         return success_response(
             data={"task": task.to_dict()},
             message="Task updated successfully"
