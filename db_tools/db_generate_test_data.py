@@ -198,7 +198,7 @@ def generate_test_data():
 
                 # Update task's historical assignees and final assignee
                 task.historical_assignees = historical_assignees
-                task.assigned_to = final_assignee  # 确保任务的 assigned_to 与最后一个日志一致
+                task.assigned_to = final_assignee  
 
                 tasks.append(task)
                 db.session.commit()

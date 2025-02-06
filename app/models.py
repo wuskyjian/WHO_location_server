@@ -119,7 +119,9 @@ class Task(db.Model):
             'description': self.description,
             'status': self.status,
             'created_by': self.created_by,
+            'created_by_username': self.creator.username if self.creator else None,
             'assigned_to': self.assigned_to,
+            'assigned_to_username': self.assignee.username if self.assignee else None,
             'historical_assignees': self.historical_assignees,
             'location': {
                 'latitude': self.location_lat,
@@ -195,7 +197,9 @@ class TaskLog(db.Model):
             'timestamp': self.timestamp.isoformat(),
             'status': self.status,
             'assigned_to': self.assigned_to,
+            'assigned_to_username': self.assignee.username if self.assignee else None,
             'modified_by': self.modified_by,
+            'modified_by_username': self.modifier.username if self.modifier else None,
             'note': self.note
         }
         
